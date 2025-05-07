@@ -115,7 +115,7 @@ const cards = [
               fill="none"
               className="mr-2 transition-transform duration-300 group-hover:scale-110"
             >
-              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-8l-4-4m0 0L8 8m4 4v12" />
             </svg>
             3.4k
           </button>
@@ -210,11 +210,12 @@ const cards = [
 ]
 
 // Physics constants
-const REPULSION_STRENGTH = 0.15
+const REPULSION_STRENGTH = 0.3
 const ATTRACTION_STRENGTH = 0.01
-const DAMPING = 0.8
-const MOUSE_INFLUENCE = 0.2
-const COLLISION_DISTANCE = 20
+const DAMPING = 0.85
+const MOUSE_INFLUENCE = 0.25
+const COLLISION_DISTANCE = 100
+const ROTATION_FACTOR = 0.1
 
 interface CardState {
   id: string
@@ -227,6 +228,8 @@ interface CardState {
   targetX: number
   targetY: number
   zIndex: number
+  rotation: number
+  rotationVelocity: number
 }
 
 export default function FloatingGrid() {
@@ -243,30 +246,38 @@ export default function FloatingGrid() {
 
     const containerWidth = containerRef.current.clientWidth
     const containerHeight = containerRef.current.clientHeight
+    const padding = COLLISION_DISTANCE
 
-    // Create initial card states with random positions
     const initialCardStates = cards.map((card, index) => {
-      const x = Math.random() * (containerWidth - card.width)
-      const y = Math.random() * (containerHeight - card.height)
+      const cols = Math.ceil(Math.sqrt(cards.length))
+      const col = index % cols
+      const row = Math.floor(index / cols)
+
+      const gridX = (containerWidth / cols) * col + padding
+      const gridY = (containerHeight / cols) * row + padding
+
+      const x = gridX + (Math.random() - 0.5) * 100
+      const y = gridY + (Math.random() - 0.5) * 100
 
       return {
         id: card.id,
-        x,
-        y,
-        vx: (Math.random() - 0.5) * 2, // Initial velocity for organic movement
+        x: Math.min(Math.max(x, padding), containerWidth - card.width - padding),
+        y: Math.min(Math.max(y, padding), containerHeight - card.height - padding),
+        vx: (Math.random() - 0.5) * 2,
         vy: (Math.random() - 0.5) * 2,
         width: card.width,
         height: card.height,
         targetX: x,
         targetY: y,
         zIndex: index,
+        rotation: Math.random() * 10 - 5,
+        rotationVelocity: 0,
       }
     })
 
     setCardStates(initialCardStates)
   }, [])
 
-  // Animation loop
   useEffect(() => {
     if (cardStates.length === 0 || !containerRef.current) return
 
@@ -275,74 +286,82 @@ export default function FloatingGrid() {
       lastTimeRef.current = time
 
       const containerRect = containerRef.current!.getBoundingClientRect()
-      
-      setCardStates(prevStates => {
-        return prevStates.map((card, index) => {
-          let { x, y, vx, vy, width, height } = card
 
-          // Apply mouse influence if mouse is near
+      setCardStates((prevStates) => {
+        return prevStates.map((card, index) => {
+          let { x, y, vx, vy, width, height, rotation, rotationVelocity } = card
+
           if (mousePosition.x && mousePosition.y) {
             const dx = mousePosition.x - containerRect.left - (x + width / 2)
             const dy = mousePosition.y - containerRect.top - (y + height / 2)
             const distance = Math.sqrt(dx * dx + dy * dy)
-            
+
             if (distance < 200) {
               const force = (200 - distance) / 200
-              // Mouse repulsion
               vx -= (dx / distance) * force * MOUSE_INFLUENCE
               vy -= (dy / distance) * force * MOUSE_INFLUENCE
+              rotationVelocity += force * ROTATION_FACTOR * (Math.random() - 0.5)
             }
           }
 
-          // Apply physics constants
-          // Natural floating motion
           const time = Date.now() * 0.001
           const floatX = Math.sin(time + index) * 0.5
           const floatY = Math.cos(time * 1.2 + index) * 0.5
-          
+
           vx += floatX * REPULSION_STRENGTH
           vy += floatY * REPULSION_STRENGTH
 
-          // Card interaction (repulsion between cards)
-          prevStates.forEach((otherCard, otherIndex) => {
+          cardStates.forEach((otherCard, otherIndex) => {
             if (index !== otherIndex) {
               const dx = x - otherCard.x
               const dy = y - otherCard.y
               const distance = Math.sqrt(dx * dx + dy * dy)
-              
+
               if (distance < COLLISION_DISTANCE) {
                 const force = (COLLISION_DISTANCE - distance) / COLLISION_DISTANCE
-                vx += (dx / distance) * force * REPULSION_STRENGTH
-                vy += (dy / distance) * force * REPULSION_STRENGTH
+                const repulsionForce = force * REPULSION_STRENGTH * 2
+
+                vx += (dx / distance) * repulsionForce
+                vy += (dy / distance) * repulsionForce
+
+                rotationVelocity += force * ROTATION_FACTOR * (Math.random() - 0.5)
               }
             }
           })
 
-          // Apply damping
           vx *= DAMPING
           vy *= DAMPING
+          rotationVelocity *= DAMPING
 
-          // Update position
           x += vx
           y += vy
+          rotation += rotationVelocity
 
-          // Boundary constraints with bounce effect
-          const bounce = 0.6
-          if (x < 0) {
-            x = 0
+          const bounce = 0.8
+          const padding = COLLISION_DISTANCE / 2
+
+          if (x < padding) {
+            x = padding
             vx = Math.abs(vx) * bounce
-          } else if (x + width > containerRect.width) {
-            x = containerRect.width - width
+            rotationVelocity += ROTATION_FACTOR * vx
+          } else if (x + width > containerRect.width - padding) {
+            x = containerRect.width - width - padding
             vx = -Math.abs(vx) * bounce
+            rotationVelocity -= ROTATION_FACTOR * vx
           }
-          
-          if (y < 0) {
-            y = 0
+
+          if (y < padding) {
+            y = padding
             vy = Math.abs(vy) * bounce
-          } else if (y + height > containerRect.height) {
-            y = containerRect.height - height
+            rotationVelocity += ROTATION_FACTOR * vy
+          } else if (y + height > containerRect.height - padding) {
+            y = containerRect.height - height - padding
             vy = -Math.abs(vy) * bounce
+            rotationVelocity -= ROTATION_FACTOR * vy
           }
+
+          rotation = Math.max(Math.min(rotation, 15), -15)
+          rotationVelocity = Math.max(Math.min(rotationVelocity, 2), -2)
 
           return {
             ...card,
@@ -350,6 +369,8 @@ export default function FloatingGrid() {
             y,
             vx,
             vy,
+            rotation,
+            rotationVelocity,
           }
         })
       })
@@ -387,6 +408,7 @@ export default function FloatingGrid() {
             animate={{
               x: cardState.x,
               y: cardState.y,
+              rotate: cardState.rotation,
             }}
             transition={{
               type: "spring",
