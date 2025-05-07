@@ -169,53 +169,18 @@ const cards = [
     ),
     width: 240,
     height: 220,
-  },
-  {
-    id: "github",
-    type: "social",
-    content: (
-      <div className="group flex flex-col items-center justify-between p-8 bg-gradient-to-br from-white/95 via-white/90 to-white/80 dark:from-slate-800/95 dark:via-slate-800/90 dark:to-slate-800/80 rounded-3xl shadow-lg backdrop-blur-md border border-slate-100/50 dark:border-slate-700/50 transition-all duration-500 ease-out hover:shadow-xl hover:-translate-y-1 hover:bg-white/100 dark:hover:bg-slate-800/100 h-full">
-        <div className="flex items-center">
-          <div className="w-14 h-14 bg-gradient-to-br from-black to-slate-800 dark:from-white dark:to-slate-200 rounded-2xl flex items-center justify-center text-white dark:text-black font-bold mr-4 shadow-lg transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 group-hover:shadow-blue-500/25">
-            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none">
-              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-            </svg>
-          </div>
-          <span className="text-base font-semibold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">Github</span>
-        </div>
-        <div className="grid grid-cols-8 gap-1.5 my-6 w-full">
-          {Array(64)
-            .fill(0)
-            .map((_, i) => (
-              <div
-                key={i}
-                className={`w-full h-4 rounded-sm transition-all duration-300 hover:scale-110 ${
-                  Math.random() > 0.7
-                    ? "bg-gradient-to-br from-green-500 to-green-400 dark:from-green-400 dark:to-green-500"
-                    : Math.random() > 0.8
-                      ? "bg-gradient-to-br from-green-400 to-green-300 dark:from-green-500 dark:to-green-400"
-                      : Math.random() > 0.9
-                        ? "bg-gradient-to-br from-green-300 to-green-200 dark:from-green-600 dark:to-green-500"
-                        : "bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600"
-                }`}
-              />
-            ))}
-        </div>
-        <button className="w-full bg-gradient-to-r from-black to-slate-800 dark:from-white dark:to-slate-200 text-white dark:text-black text-sm px-6 py-3 rounded-full font-medium transition-all duration-300 hover:from-slate-800 hover:to-black dark:hover:from-slate-200 dark:hover:to-white hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95">View Profile</button>
-      </div>
-    ),
-    width: 280,
-    height: 320,
-  },
+  }
 ]
 
 // Physics constants
-const REPULSION_STRENGTH = 0.3
-const ATTRACTION_STRENGTH = 0.01
-const DAMPING = 0.85
-const MOUSE_INFLUENCE = 0.25
-const COLLISION_DISTANCE = 100
-const ROTATION_FACTOR = 0.1
+const REPULSION_STRENGTH = 0.15
+const ATTRACTION_STRENGTH = 0.005
+const DAMPING = 0.92
+const MOUSE_INFLUENCE = 0.15
+const COLLISION_DISTANCE = 150
+const ROTATION_FACTOR = 0.08
+const FLOAT_AMPLITUDE = 0.3
+const VELOCITY_LIMIT = 5
 
 interface CardState {
   id: string
@@ -282,7 +247,7 @@ export default function FloatingGrid() {
     if (cardStates.length === 0 || !containerRef.current) return
 
     const animate = (time: number) => {
-      const deltaTime = time - lastTimeRef.current
+      const deltaTime = Math.min(time - lastTimeRef.current, 32)
       lastTimeRef.current = time
 
       const containerRect = containerRef.current!.getBoundingClientRect()
@@ -296,17 +261,18 @@ export default function FloatingGrid() {
             const dy = mousePosition.y - containerRect.top - (y + height / 2)
             const distance = Math.sqrt(dx * dx + dy * dy)
 
-            if (distance < 200) {
-              const force = (200 - distance) / 200
-              vx -= (dx / distance) * force * MOUSE_INFLUENCE
-              vy -= (dy / distance) * force * MOUSE_INFLUENCE
-              rotationVelocity += force * ROTATION_FACTOR * (Math.random() - 0.5)
+            if (distance < COLLISION_DISTANCE * 2) {
+              const force = (COLLISION_DISTANCE * 2 - distance) / (COLLISION_DISTANCE * 2)
+              const smoothForce = force * force
+              vx -= (dx / distance) * smoothForce * MOUSE_INFLUENCE
+              vy -= (dy / distance) * smoothForce * MOUSE_INFLUENCE
+              rotationVelocity += smoothForce * ROTATION_FACTOR * (Math.random() - 0.5)
             }
           }
 
-          const time = Date.now() * 0.001
-          const floatX = Math.sin(time + index) * 0.5
-          const floatY = Math.cos(time * 1.2 + index) * 0.5
+          const time = Date.now() * 0.0005
+          const floatX = Math.sin(time + index) * FLOAT_AMPLITUDE
+          const floatY = Math.cos(time * 1.2 + index) * FLOAT_AMPLITUDE
 
           vx += floatX * REPULSION_STRENGTH
           vy += floatY * REPULSION_STRENGTH
@@ -319,12 +285,13 @@ export default function FloatingGrid() {
 
               if (distance < COLLISION_DISTANCE) {
                 const force = (COLLISION_DISTANCE - distance) / COLLISION_DISTANCE
-                const repulsionForce = force * REPULSION_STRENGTH * 2
+                const smoothForce = force * force
+                const repulsionForce = smoothForce * REPULSION_STRENGTH
 
                 vx += (dx / distance) * repulsionForce
                 vy += (dy / distance) * repulsionForce
 
-                rotationVelocity += force * ROTATION_FACTOR * (Math.random() - 0.5)
+                rotationVelocity += smoothForce * ROTATION_FACTOR * (Math.random() - 0.5)
               }
             }
           })
@@ -333,35 +300,34 @@ export default function FloatingGrid() {
           vy *= DAMPING
           rotationVelocity *= DAMPING
 
-          x += vx
-          y += vy
-          rotation += rotationVelocity
+          vx = Math.max(Math.min(vx, VELOCITY_LIMIT), -VELOCITY_LIMIT)
+          vy = Math.max(Math.min(vy, VELOCITY_LIMIT), -VELOCITY_LIMIT)
 
-          const bounce = 0.8
-          const padding = COLLISION_DISTANCE / 2
+          x += vx * (deltaTime / 16)
+          y += vy * (deltaTime / 16)
+          rotation += rotationVelocity * (deltaTime / 16)
+
+          const bounce = 0.7
+          const padding = COLLISION_DISTANCE * 0.5
 
           if (x < padding) {
             x = padding
             vx = Math.abs(vx) * bounce
-            rotationVelocity += ROTATION_FACTOR * vx
           } else if (x + width > containerRect.width - padding) {
             x = containerRect.width - width - padding
             vx = -Math.abs(vx) * bounce
-            rotationVelocity -= ROTATION_FACTOR * vx
           }
 
           if (y < padding) {
             y = padding
             vy = Math.abs(vy) * bounce
-            rotationVelocity += ROTATION_FACTOR * vy
           } else if (y + height > containerRect.height - padding) {
             y = containerRect.height - height - padding
             vy = -Math.abs(vy) * bounce
-            rotationVelocity -= ROTATION_FACTOR * vy
           }
 
-          rotation = Math.max(Math.min(rotation, 15), -15)
-          rotationVelocity = Math.max(Math.min(rotationVelocity, 2), -2)
+          rotation = Math.max(Math.min(rotation, 12), -12)
+          rotationVelocity = Math.max(Math.min(rotationVelocity, 1.5), -1.5)
 
           return {
             ...card,
@@ -390,7 +356,7 @@ export default function FloatingGrid() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-[600px] overflow-hidden"
+      className="relative w-full h-full min-h-[1000px] overflow-hidden"
     >
       {cardStates.map((cardState) => {
         const card = cards.find((c) => c.id === cardState.id)
@@ -412,9 +378,10 @@ export default function FloatingGrid() {
             }}
             transition={{
               type: "spring",
-              damping: 20,
-              stiffness: 100,
-              mass: 1,
+              damping: 30,
+              stiffness: 80,
+              mass: 1.2,
+              velocity: 0,
             }}
             onHoverStart={() => setHoveredCard(cardState.id)}
             onHoverEnd={() => setHoveredCard(null)}
