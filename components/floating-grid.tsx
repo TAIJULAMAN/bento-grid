@@ -422,6 +422,7 @@ export default function FloatingGrid() {
   return (
     <div
       ref={containerRef}
+      className="w-full h-screen relative"
     >
       {cardStates.map((cardState) => {
         const cardData = cards.find((c) => c.id === cardState.id)
